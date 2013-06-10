@@ -1,769 +1,780 @@
 package com.example.myfilemanager;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.sql.Date;
-import java.text.SimpleDateFormat;
+import java.util.List;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.IOException;
+import java.io.BufferedOutputStream;
+import java.io.BufferedInputStream;
+import java.io.FileOutputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 
-import android.app.Activity;
+
+import android.app.ListActivity;
+import android.os.Bundle;
+import android.graphics.drawable.Drawable;
+import android.content.DialogInterface;
 import android.app.AlertDialog;
 import android.app.AlertDialog.Builder;
-import android.content.DialogInterface;
-import android.content.Intent;
-import android.graphics.drawable.Drawable;
+import android.content.DialogInterface.OnClickListener;	
 import android.net.Uri;
-import android.os.Bundle;
-import android.view.KeyEvent;
+import android.content.Intent;
+import android.widget.ListView;
+import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup.LayoutParams;
-import android.webkit.MimeTypeMap;
-import android.widget.AdapterView;
-import android.widget.AdapterView.OnItemClickListener;
-import android.widget.AdapterView.OnItemLongClickListener;
-import android.widget.LinearLayout;
-import android.widget.ListView;
+import android.view.LayoutInflater;
+import android.widget.TextView;
+import android.widget.EditText;	
 
-
-/*程序的主屏幕*/
-public class ContentActivity extends Activity {
-	//文件列表的视图
-	private ListView fileListView = null;
-	//文件信息的列表
-	private List<FileInfo> fileList = new ArrayList<FileInfo>();
-	//当前路径的目录
-	private File currentDirectory = new File("/");
-	//复制或剪切时记录
-	private File tmpFile =null;
-	//判断粘贴时是剪切还是复制
-	private boolean isCut = false;
+public class ContentActivity extends ListActivity {
+	private List<IconifiedText>	directoryEntries = new ArrayList<IconifiedText>();
+	private File				currentDirectory = new File("/");
+	private File 				myTmpFile 		 = null;
+	private int 				myTmpOpt		 = -1;
 	
-	//菜单
-	private final int menu_new = 0;
-	private final int menu_del = 1;
-	private final int menu_paste = 2;
-	private final int menu_root = 3;
-	private final int menu_uplevel = 4;
-
 	@Override
-	public boolean onCreateOptionsMenu(Menu menu) {
-		super.onCreateOptionsMenu(menu);
-		//menu.add(0,ADD_ID,1, R.string.menu_add);
-		//第一个参数表示菜单项的一个分组号，第二个表示该菜单项的ID，最后一个表示应用的字符串资源的id，这里不太清楚第三个参数的意义是什么。
-		menu.add(0, menu_new, 0, "新建文件夹");//.setIcon(this.getResources().getDrawable(R.drawable.addfolderr));
-		menu.add(0, menu_del, 0, "删除目录");// .setIcon(R.drawable.delete);
-		menu.add(0, menu_paste, 0, "粘贴");// .setIcon(R.drawable.paste);
-		menu.add(0, menu_root, 0, "根目录");// .setIcon(R.drawable.goroot);
-		menu.add(0, menu_uplevel, 0, "返回");// .setIcon(R.drawable.uponelevel);
-		//menu.setGroupEnabled(2,false);
-		return true;
-	}
-
-	/** Called when the activity is first created. */
-	// @SuppressWarnings("deprecation")
-	@Override
-	public void onCreate(Bundle savedInstanceState) {
+	public void onCreate(Bundle savedInstanceState)
+	{
 		super.onCreate(savedInstanceState);
-		// setContentView(R.layout.main);
-		MainLayout mainlayout = new MainLayout(this);
-		mainlayout.setLayoutParams(new LinearLayout.LayoutParams(
-				LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-		setContentView(mainlayout);
-		fileListView = mainlayout.getFileListView();
-		//创建根目录
-		creatRootFile();
-		
-		//文件单击响应事件
-		fileListView.setOnItemClickListener(new OnItemClickListener() {
-			@Override
-			public void onItemClick(AdapterView<?> parent, View view,
-					int position, long id) {
-				String selectedFileString = fileList.get(position)
-						.get_filename();
-				if (selectedFileString.equals(getString(R.string.current_dir))) {
-					openTheFile(currentDirectory);
-				} else if (selectedFileString
-						.equals(getString(R.string.up_one_level))) {
-					upLevel();
-				} else {
-					File selectedFile = null;
-					String pathString = currentDirectory.getAbsolutePath();
-					if (!currentDirectory.equals("/")) {
-						pathString += "/";
-					}
-					selectedFile = new File(pathString + selectedFileString);
-					if (selectedFile != null) {
-						openTheFile(selectedFile);
-					}
-				}
-
-			}
-		});
-		//文件长按事件的处理
-		fileListView.setOnItemLongClickListener(new OnItemLongClickListener() {
-			@Override
-			public boolean onItemLongClick(AdapterView<?> parent, View view,
-					int position, long id) {
-				String selectedFileString = fileList.get(position)
-						.get_filename();
-				if (selectedFileString.equals(getString(R.string.current_dir))) {
-					openTheFile(currentDirectory);
-				} else if (selectedFileString
-						.equals(getString(R.string.up_one_level))) {
-					upLevel();
-				} else {
-					File selectedFile = null;
-					String pathString = currentDirectory.getAbsolutePath();
-					if (currentDirectory.getParent() != null) {
-						pathString += "/";
-					}
-					selectedFile = new File(pathString
-							+ fileList.get(position).get_filename());
-					if (selectedFile != null)
-						longClickOpenTheFile(selectedFile);
-
-				}
-				return true;
-			}
-		});
-
+		browseToRoot();
+		this.setSelection(0);
 	}
-	//检查文件类型
-	public boolean checkFileType(String fileName, String[] extendNames) {
-		for (String aEnd : extendNames) {
-			if (fileName.endsWith(aEnd))
+	//浏览文件系统的根目录
+	private void browseToRoot() 
+	{
+		browseTo(new File("/"));
+    }
+	//返回上一级目录
+	private void upOneLevel()
+	{
+		if(this.currentDirectory.getParent() != null)
+			this.browseTo(this.currentDirectory.getParentFile());
+	}
+	//浏览指定的目录,如果是文件则进行打开操作
+	private void browseTo(final File file)
+	{
+		this.setTitle(file.getAbsolutePath());
+		if (file.isDirectory())
+		{
+			this.currentDirectory = file;
+			fill(file.listFiles());
+		}
+		else
+		{
+			fileOptMenu(file);
+		}
+	}
+	
+	private void fill(File[] files)
+	{
+		//清空列表
+		this.directoryEntries.clear();
+
+		//添加一个当前目录的选项
+		this.directoryEntries.add(new IconifiedText(getString(R.string.current_dir), getResources().getDrawable(R.drawable.refresh)));
+		//如果不是根目录则添加上一级目录项
+		if (this.currentDirectory.getParent() != null)
+			this.directoryEntries.add(new IconifiedText(getString(R.string.up_one_level), getResources().getDrawable(R.drawable.uponelevel)));
+
+		Drawable currentIcon = null;
+		for (File currentFile : files)
+		{
+			//判断是一个文件夹还是一个文件
+			if (currentFile.isDirectory())
+			{
+				currentIcon = getResources().getDrawable(R.drawable.folder);
+			}
+			else
+			{
+				//取得文件名
+				String fileName = currentFile.getName();
+				//根据文件名来判断文件类型，设置不同的图标
+				if (checkEndsWithInStringArray(fileName, getResources().getStringArray(R.array.fileEndingImage)))
+				{
+					currentIcon = getResources().getDrawable(R.drawable.image);
+				}
+				else if (checkEndsWithInStringArray(fileName, getResources().getStringArray(R.array.fileEndingWebText)))
+				{
+					currentIcon = getResources().getDrawable(R.drawable.webtext);
+				}
+				else if (checkEndsWithInStringArray(fileName, getResources().getStringArray(R.array.fileEndingPackage)))
+				{
+					currentIcon = getResources().getDrawable(R.drawable.packed);
+				}
+				else if (checkEndsWithInStringArray(fileName, getResources().getStringArray(R.array.fileEndingAudio)))
+				{
+					currentIcon = getResources().getDrawable(R.drawable.audio);
+				}
+				else if (checkEndsWithInStringArray(fileName, getResources().getStringArray(R.array.fileEndingVideo)))
+				{
+					currentIcon = getResources().getDrawable(R.drawable.video);
+				}
+				else
+				{
+					currentIcon = getResources().getDrawable(R.drawable.text);
+				}
+			}
+			//确保只显示文件名、不显示路径如：/sdcard/111.txt就只是显示111.txt
+			int currentPathStringLenght = this.currentDirectory.getAbsolutePath().length();
+			this.directoryEntries.add(new IconifiedText(currentFile.getAbsolutePath().substring(currentPathStringLenght), currentIcon));
+		}
+		Collections.sort(this.directoryEntries);
+		IconifiedTextListAdapter itla = new IconifiedTextListAdapter(this);
+		//将表设置到ListAdapter中
+		itla.setListItems(this.directoryEntries);
+		//为ListActivity添加一个ListAdapter
+		this.setListAdapter(itla);
+	}
+	
+	//通过文件名判断是什么类型的文件
+	private boolean checkEndsWithInStringArray(String checkItsEnd, 
+					String[] fileEndings)
+	{
+		for(String aEnd : fileEndings)
+		{
+			if(checkItsEnd.endsWith(aEnd))
 				return true;
 		}
 		return false;
 	}
-	//根据获得的文件目录设置文件信息列表的每一项
-	public void fillListView(File[] files) {
-		this.fileList.clear();
-
-		fileList.add(new FileInfo(this.getString(R.string.current_dir), "", this
-				.getResources().getDrawable(R.drawable.folder)));
-		if (this.currentDirectory.getParent() != null) {
-			fileList.add(new FileInfo(this.getString(R.string.up_one_level), "",
-					this.getResources().getDrawable(R.drawable.uponelevel)));
-		}
-		Drawable icon = null;
-		SimpleDateFormat dateFormat = new SimpleDateFormat(
-				"yyyy-MM-dd HH:mm:ss");
-		List<FileInfo> foldList = new ArrayList<FileInfo>();
-		List<FileInfo> othersList = new ArrayList<FileInfo>();
-		for (File file : files) {
-			String fileName = file.getName();
-			Date date = new Date(file.lastModified());
-			String updateTime = dateFormat.format(date);
-
-			if (file.isDirectory()) {
-				icon = getResources().getDrawable(R.drawable.folder);
-				foldList.add(new FileInfo(fileName, updateTime, icon));
-			} else {
-				if (checkFileType(fileName,
-						getResources().getStringArray(R.array.fileEndingAudio))) {
-					icon = getResources().getDrawable(R.drawable.audio);
-
-				} else if (checkFileType(fileName, getResources()
-						.getStringArray(R.array.fileEndingImage))) {
-					icon = getResources()
-							.getDrawable(R.drawable.image);
-				} else if (checkFileType(fileName, getResources()
-						.getStringArray(R.array.fileEndingVideo))) {
-					icon = getResources().getDrawable(R.drawable.video);
-
-				} else if (checkFileType(fileName, getResources()
-						.getStringArray(R.array.fileEndingPackage))) {
-					icon = getResources().getDrawable(R.drawable.packed);
-				} else if (checkFileType(fileName, getResources()
-						.getStringArray(R.array.fileEndingWebText))) {
-					icon = getResources().getDrawable(R.drawable.webtext);
-				} else {
-
-					icon = getResources().getDrawable(R.drawable.text);
+	
+	//处理文件，包括打开，重命名等操作
+	public void fileOptMenu(final File file)
+	{
+		OnClickListener listener = new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface dialog, int which)
+			{
+				if (which == 0)
+				{
+					openFile(file);
 				}
-				othersList.add(new FileInfo(fileName, updateTime, icon));
+				else if (which == 1)
+				{
+					//自定义一个带输入的对话框由TextView和EditText构成
+					final LayoutInflater factory = LayoutInflater.from(ContentActivity.this);
+					final View dialogview = factory.inflate(R.layout.rename, null);
+					//设置TextView的提示信息
+					((TextView) dialogview.findViewById(R.id.textView01)).setText("重命名");
+					//设置EditText输入框初始值
+					((EditText) dialogview.findViewById(R.id.editText01)).setText(file.getName());
+					
+					Builder builder = new Builder(ContentActivity.this);
+					builder.setTitle("重命名");
+					builder.setView(dialogview);
+					builder.setPositiveButton(android.R.string.ok,
+							new AlertDialog.OnClickListener() {
+								public void onClick(DialogInterface dialog, int which) {
+									//点击确定之后
+									String value = GetCurDirectory()+"/"+((EditText) dialogview.findViewById(R.id.editText01)).getText().toString();
+									if(new File(value).exists())
+									{
+										Builder builder = new Builder(ContentActivity.this);
+										builder.setTitle("重命名");
+										builder.setMessage("文件名重复，是否需要覆盖？");
+										builder.setPositiveButton(android.R.string.ok,
+												new AlertDialog.OnClickListener() {
+													public void onClick(DialogInterface dialog, int which) {
+														String str2 = GetCurDirectory()+"/"+((EditText) dialogview.findViewById(R.id.editText01)).getText().toString();
+														file.renameTo(new File(str2));
+														browseTo(new File(GetCurDirectory()));
+													}
+												});
+										builder.setNegativeButton(android.R.string.cancel,
+												new DialogInterface.OnClickListener() {
+													public void onClick(DialogInterface dialog, int which) {
+														dialog.cancel();
+													}
+												});
+										builder.setCancelable(false);
+										builder.create();
+										builder.show();
+									}
+									else 
+									{
+										//重命名
+										file.renameTo(new File(value));
+										browseTo(new File(GetCurDirectory()));
+									}
+								}
+							});
+					builder.setNegativeButton(android.R.string.cancel,
+							new DialogInterface.OnClickListener() {
+								public void onClick(DialogInterface dialog, int which) {
+									dialog.cancel();
+								}
+							});
+					builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
+								public void onCancel(DialogInterface dialog) {
+									dialog.cancel();
+								}
+							});
+					builder.show();
+				}
+				else if ( which == 2 )
+				{
+					Builder builder = new Builder(ContentActivity.this);
+					builder.setTitle("删除文件");
+					builder.setMessage("确定删除"+file.getName()+"？");
+					builder.setPositiveButton(android.R.string.ok,
+							new AlertDialog.OnClickListener() {
+								public void onClick(DialogInterface dialog, int which) {
+									/*
+									if ( deleteFile(file) )
+									{
+										Builder builder = new Builder(ContentActivity.this);
+										builder.setTitle("提示对话框");
+										builder.setMessage("删除成功");
+										builder.setPositiveButton(android.R.string.ok,
+												new AlertDialog.OnClickListener() {
+													public void onClick(DialogInterface dialog, int which) {
+														//点击确定按钮之后
+														dialog.cancel();
+														browseTo(new File(GetCurDirectory()));
+													}
+												});
+										builder.setCancelable(false);
+										builder.create();
+										builder.show();
+									
+									}
+									else 
+									{
+										Builder builder = new Builder(ContentActivity.this);
+										builder.setTitle("提示对话框");
+										builder.setMessage("删除失败");
+										builder.setPositiveButton(android.R.string.ok,
+												new AlertDialog.OnClickListener() {
+													public void onClick(DialogInterface dialog, int which) {
+														//点击确定按钮之后
+														dialog.cancel();
+													}
+												});
+										builder.setCancelable(false);
+										builder.create();
+										builder.show();	
+									}
+									*/
+									if(file.exists())
+									{
+										file.delete();
+										Builder builder = new Builder(ContentActivity.this);
+										builder.setTitle("提示对话框");
+										builder.setMessage("删除成功");
+										builder.setPositiveButton(android.R.string.ok,
+												new AlertDialog.OnClickListener() {
+													public void onClick(DialogInterface dialog, int which) {
+														//点击确定按钮之后
+														dialog.cancel();
+														browseTo(new File(GetCurDirectory()));
+													}
+												});
+										builder.setCancelable(false);
+										builder.create();
+										builder.show();
+									}
+									else
+									{
+										Builder builder = new Builder(ContentActivity.this);
+										builder.setTitle("提示对话框");
+										builder.setMessage("删除失败");
+										builder.setPositiveButton(android.R.string.ok,
+												new AlertDialog.OnClickListener() {
+													public void onClick(DialogInterface dialog, int which) {
+														//点击确定按钮之后
+														dialog.cancel();
+													}
+												});
+										builder.setCancelable(false);
+										builder.create();
+										builder.show();	
+									}
+								}
+							});
+					builder.setNegativeButton(android.R.string.cancel,
+							new DialogInterface.OnClickListener() {
+								public void onClick(DialogInterface dialog, int which) {
+									dialog.cancel();
+								}
+							});
+					builder.setCancelable(false);
+					builder.create();
+					builder.show();
+				}
+				else if ( which == 3 )//复制
+				{
+					//保存我们复制的文件目录
+					myTmpFile = file;
+					//这里我们用0表示复制操作
+					myTmpOpt = 0;
+				}
+				else if ( which == 4 )//剪切
+				{
+					//保存我们复制的文件目录
+					myTmpFile = file;
+					//这里我们用0表示剪切操作
+					myTmpOpt = 1;	 
+				}
 			}
-
-		}
-		//按字母排序
-		Collections.sort(foldList);
-		Collections.sort(othersList);
-
-		for (int i = 0; i < foldList.size(); i++) {
-			fileList.add(foldList.get(i));
-
-		}
-		for (int i = 0; i < othersList.size(); i++) {
-			fileList.add(othersList.get(i));
-		}
-		FileInfoAdapter adapter = new FileInfoAdapter(this);
-		adapter.setFileList(fileList);
-		fileListView.setAdapter(adapter);
-
-	}
-
-	public void openTheFile(File file) {
-
-		if (file.isDirectory()) {
-			this.currentDirectory = file;
-			this.setTitle(file.getAbsolutePath());
-			fillListView(file.listFiles());
-		} else {
-			openFile(file);
-		}
-	}
-	//长按事件的处理
-	public void longClickOpenTheFile(File file) {
-		if (file.isDirectory()) {
-			this.currentDirectory = file;
-			this.setTitle(file.getAbsolutePath());
-			fillListView(file.listFiles());
-		} else {
-			openFileOperateMenu(file);
-		}
-	}
-	//创建根目录
-	public void creatRootFile() {
-		openTheFile(new File("/"));
-	}
-	//返回上一级
-	public void upLevel() {
-		if (this.currentDirectory.getParent() != null) {
-			openTheFile(this.currentDirectory.getParentFile());
-		}
-	}
-
-	//长按后弹出选择对话框
-	public void openFileOperateMenu(File file) {
-		String[] menu = { "打开", "删除", "复制", "剪切", "重命名", "属性" };
-		new AlertDialog.Builder(ContentActivity.this).setTitle("请选择操作：")
-				.setItems(menu, new FileClickListener(file)).show();
-	}
-
-	//重载返回键操作
-	@Override
-	public boolean onKeyDown(int keyCode, KeyEvent event) {
-		if (keyCode == KeyEvent.KEYCODE_BACK && event.getRepeatCount() == 0) {
-			if (currentDirectory.getParent() == null)
-				ContentActivity.this.finish();
-			else {
-				upLevel();
-			}
-			return true;
-		}
-		return super.onKeyDown(keyCode, event);
-	}
-	//显示提示信息对话框
-	public void showMessageDialog(String title, String message) {
-		Builder builder = new Builder(this);
-		builder.setTitle(title);
-		builder.setMessage(message);
-		builder.setPositiveButton(android.R.string.ok,
-				new AlertDialog.OnClickListener() {
-					public void onClick(DialogInterface dialog, int which) {
-						dialog.cancel();
-					}
-				});
-		builder.setCancelable(false);
-		builder.create();
-		builder.show();
+		};
+		//显示操作菜单
+	    String[] menu={"打开","重命名","删除","复制","剪切"};
+	    new AlertDialog.Builder(ContentActivity.this)
+	        .setTitle("请选择你要进行的操作")
+	        .setItems(menu,listener)
+	        .show();
 	}
 	
-    public void showMessageDialog(String title,View view){
-    	Builder builder = new Builder(this);
-    	builder.setTitle(title);
-    	builder.setView(view);
-    	builder.setPositiveButton(android.R.string.ok,
-				new AlertDialog.OnClickListener() {
-					public void onClick(DialogInterface dialog, int which) {
-						dialog.cancel();
-					}
-				});
-    	builder.setCancelable(false);
-    	builder.create();
-    	builder.show();
-    }
-    //二次确认对话框
-	public void confirmDialog(String title, String message,
-			DialogInterface.OnClickListener positiveButtonEventHanddle,
-			DialogInterface.OnClickListener negativeButtonEventHanddle) {
-		Builder builder = new Builder(this);
-		builder.setTitle(title);
-		builder.setMessage(message);
-		builder.setPositiveButton(android.R.string.ok,
-				positiveButtonEventHanddle);
-		builder.setNegativeButton(android.R.string.cancel,
-				negativeButtonEventHanddle);
-		builder.setCancelable(false);
-		builder.create();
-		builder.show();
-	}
-	//自定义对话框
-	public void customDialog(String title, View view,
-			DialogInterface.OnClickListener positiveButtonHanddle,
-			DialogInterface.OnClickListener negativeButtonHanddle,
-			DialogInterface.OnCancelListener cancelButtonHanddle) {
-		Builder builder = new Builder(this);
-		builder.setTitle(title);
-		builder.setView(view);
-		builder.setPositiveButton(android.R.string.ok, positiveButtonHanddle);
-		builder.setNegativeButton(android.R.string.cancel,
-				negativeButtonHanddle);
-		builder.setOnCancelListener(cancelButtonHanddle);
-		builder.show();
-	}
-	//删除文件或文件夹调用的方法
-	public static void deleteAll(File file) throws IOException{
-		if(!file.exists()){
-			throw new IOException(file.getName()+"文件不存在");
-		}
-		boolean is_del=true;
-		if(!(is_del=file.delete()))
-		{
-			File tmp[]=file.listFiles();
-			for(int i=0;i<tmp.length;i++){
-				if(tmp[i].isDirectory()){
-					deleteAll(tmp[i]);			
-				}
-				is_del=tmp[i].delete();
-				
-			}
-			is_del=file.delete();
-			
-		}
-		if(!is_del)
-		{
-			throw new IOException("无法删除"+file.getName());
-		}
-	}
-	//移动文件
-	public static void moveFile(String source,String destination){
-		new File(source).renameTo(new File(destination));
-	}
-	public static void moveFile(File source,File destination){
-		source.renameTo(destination);
-	}
-	//粘贴文件的流操作
-	public static void copyFile(File source,File destination){
-		InputStream input =null;
-		OutputStream output =null;
-		BufferedInputStream byteInput=null;
-		BufferedOutputStream byteOutput =null;
-		try{
-			input = new FileInputStream(source);
-			output = new FileOutputStream(destination);
-			byteInput = new BufferedInputStream(input);
-			byteOutput = new BufferedOutputStream(output);
-			byte[] b = new byte[8192];
-			int len =byteInput.read(b);
-			while(len!=-1){
-				byteOutput.write(b,0,len);
-				len= byteInput.read(b);
-				
-			}
-		}
-		catch(FileNotFoundException a){
-			a.printStackTrace();
-			
-		}
-		catch(IOException c){
-			c.printStackTrace();
-		}
-		finally{
-			try{
-				if(byteInput!=null){
-					byteInput.close();
-				}
-				if(byteOutput!=null){
-					byteOutput.close();
-				}
-			}
-			catch(IOException d){
-				d.printStackTrace();		
-			}
-		}
-	}
 	//打开指定文件
-	protected void openFile(File file) {
+	protected void openFile(File aFile)
+	{
 		Intent intent = new Intent();
-		intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-		// 设置intent的Action属性
-		intent.setAction(Intent.ACTION_VIEW);
-	
-		MimeTypeMap aMap = MimeTypeMap.getSingleton();
+		intent.setAction(android.content.Intent.ACTION_VIEW);
+		File file = new File(aFile.getAbsolutePath());
+		// 取得文件名
 		String fileName = file.getName();
-		int index=0;
-		for(int i=fileName.length()-1;i>=0;i--)
+		// 根据不同的文件类型来打开文件
+		if (checkEndsWithInStringArray(fileName, getResources().getStringArray(R.array.fileEndingImage)))
 		{
-			if(fileName.charAt(i)=='.'){
-				
-				index=i+1;
-				break;
-			}
+			intent.setDataAndType(Uri.fromFile(file), "image/*");
 		}
-		String extensionString=fileName.substring(index);
-		//System.out.println(extensionString);
-		// 获取文件file的MIME类型
-		String type=aMap.getMimeTypeFromExtension(extensionString);
-		// 设置intent的data和Type属性
-		intent.setDataAndType(/* uri */Uri.fromFile(file), type);
-		// 跳转
+		else if (checkEndsWithInStringArray(fileName, getResources().getStringArray(R.array.fileEndingAudio)))
+		{
+			intent.setDataAndType(Uri.fromFile(file), "audio/*");
+		}
+		else if (checkEndsWithInStringArray(fileName, getResources().getStringArray(R.array.fileEndingVideo)))
+		{
+			intent.setDataAndType(Uri.fromFile(file), "video/*");
+		}
+		else
+		{
+			intent.setDataAndType(Uri.fromFile(file), "application/*");
+		}
 		startActivity(intent);
 	}
-	//重命名
-	private void renameFile(final File file){
-		final DialogLayout renamedDialogLayout = new DialogLayout(this);
-		renamedDialogLayout.getTextView().setText("请输入新的文件名");
-		renamedDialogLayout.getEditText().setText(file.getName());
-		this.customDialog("重命名", renamedDialogLayout, new DialogInterface.OnClickListener() {
-			
-			@Override
-			public void onClick(DialogInterface dialog, int which) {
-				// TODO 自动生成的方法存根
-				String newFileNameString = renamedDialogLayout.getEditText().getText().toString();
-				if(!newFileNameString.equals(file.getName())){
-					String nowDirectory = currentDirectory.getAbsolutePath();
-					if(!nowDirectory.equals("/")){
-						nowDirectory+="/";
-					}
-					final String allNameString = nowDirectory+ newFileNameString;
-					if(new File(allNameString).exists()){
-						confirmDialog("重命名", "文件名重复，是否覆盖？", 
-						new DialogInterface.OnClickListener() {
-						
-							public void onClick(DialogInterface dialog,int which) {
-								// TODO 自动生成的方法存根
-								boolean flag = file.renameTo(new File(allNameString));
-								if(flag){
-									openTheFile(currentDirectory);
-								}
-								else{
-								showMessageDialog("重命名", "重命名失败");
-								}
-								
-							}
-						}, new DialogInterface.OnClickListener() {
-							
-							@Override
-							public void onClick(DialogInterface dialog, int which) {
-								// TODO 自动生成的方法存根
-								dialog.cancel();
-							}
-						});
-						
-					}
-					else{
-						boolean flag = file.renameTo(new File(allNameString));
-						if(flag){
-							openTheFile(currentDirectory);
-						}
-						else {
-							showMessageDialog("重命名", "重命名失败");
-						}
-					}
-				}
-				
-			}
-		}, new DialogInterface.OnClickListener() {
-			
-			@Override
-			public void onClick(DialogInterface dialog, int which) {
-				// TODO 自动生成的方法存根
-				dialog.cancel();
-				
-			}
-		}, new DialogInterface.OnCancelListener() {
-			
-			@Override
-			public void onCancel(DialogInterface dialog) {
-				// TODO 自动生成的方法存根
-				dialog.cancel();
-			}
-		});
-	}
-	//删除文件
-	private void deleteFile(final File file){
-		this.confirmDialog("删除文件", "确定要删除吗？", new DialogInterface.OnClickListener() {
-			
-			@Override
-			public void onClick(DialogInterface dialog, int which) {
-				// TODO 自动生成的方法存根
-				try{
-					deleteAll(file);
-					showMessageDialog("删除文件：", "删除文件成功！");
-					openTheFile(currentDirectory);
-				}
-				catch(IOException e){
-					e.printStackTrace();
-					showMessageDialog("删除文件：", "删除文件："+file.getName()+"失败！");
-				}
-			}
-		}, new DialogInterface.OnClickListener() {
-			
-			@Override
-			public void onClick(DialogInterface dialog, int which) {
-				// TODO 自动生成的方法存根
-				dialog.cancel();
-			}
-		});
+	
+	protected void onListItemClick(ListView l, View v, int position, long id)
+	{
+		super.onListItemClick(l, v, position, id);
+		// 取得选中的一项的文件名
+		String selectedFileString = this.directoryEntries.get(position).getText();
 		
-	}
-	//显示指定文件详细信息
-	private void displayFileInfo(File file) {
-		FileDetailInfoLayout layout = new FileDetailInfoLayout(this);
-		String pathString = file.getAbsolutePath();
-
-		layout.getPathTextView().setText("位置：" + pathString);
-		long size = file.length();
-		String sizeString = String.valueOf(size);
-		layout.getSizeTextView().setText("大小：" + sizeString + "B");
-		SimpleDateFormat dateFormat = new SimpleDateFormat(
-				"yyyy-MM-dd HH:mm:ss");
-		Date date = new Date(file.lastModified());
-		String updateTime = dateFormat.format(date);
-
-		layout.getUpdateTimeTextView().setText("最后修改时间：" + updateTime);
-		if (file.canRead())
-			layout.getCanReadTextView().setText("可读：是");
+		if (selectedFileString.equals(getString(R.string.current_dir)))
+		{
+			//如果选中的是刷新
+			this.browseTo(this.currentDirectory);
+		}
+		else if (selectedFileString.equals(getString(R.string.up_one_level)))
+		{
+			//返回上一级目录
+			this.upOneLevel();
+		}
 		else
-			layout.getCanReadTextView().setText("可读：否");
-		if (file.canWrite())
-			layout.getCanWriteTextView().setText("可写：是");
-		else {
-			layout.getCanWriteTextView().setText("可写：否");
+		{
+					
+			File clickedFile = null;
+			clickedFile = new File(this.currentDirectory.getAbsolutePath()+ this.directoryEntries.get(position).getText());
+			if(clickedFile != null)
+				this.browseTo(clickedFile);
 		}
-		if (file.isHidden())
-			layout.getIsHiddenTextView().setText("隐藏：否");
-		else {
-			layout.getIsHiddenTextView().setText("隐藏：否");
-		}
-		this.showMessageDialog(file.getName(), layout);
-
 	}
-	//定义内部类继承对话框的点击事件接口
-	public class FileClickListener implements DialogInterface.OnClickListener{
-		File file;
-		public FileClickListener(File selectedFile){
-				file = selectedFile;
+	
+	public boolean onCreateOptionsMenu(Menu menu)
+	{
+		super.onCreateOptionsMenu(menu);
+		menu.add(0, 0, 0, "新建目录").setIcon(R.drawable.addfolderr);
+		menu.add(0, 1, 0, "删除目录").setIcon(R.drawable.delete);
+		menu.add(0, 2, 0, "粘贴文件").setIcon(R.drawable.paste);
+		menu.add(0, 3, 0, "回根目录").setIcon(R.drawable.goroot);
+		return true;
+	}
+	
+	public boolean onOptionsItemSelected(MenuItem item)
+	{
+		super.onOptionsItemSelected(item);
+		switch (item.getItemId())
+		{
+			case 0:
+				Mynew();
+				break;
+			case 1:
+				//注意：删除目录，谨慎操作，该例子提供了
+				//deleteFile（删除文件）和deleteFolder（删除整个目录）
+				MyDelete();
+				break;
+			case 2:
+				MyPaste();
+				break;
+			case 3:
+				this.browseToRoot();
+				break;
 		}
-		@Override
-		public void onClick(DialogInterface dialog, int which) {
-			// TODO 自动生成的方法存根
-			if(which==0){
-				openFile(file);
-			}
-			else if(which==1){
-				deleteFile(file);
-			}
-			else if(which==2){
-				tmpFile=file;
-				isCut=false;
-			}
-			else if(which==3){
-				tmpFile=file;
-				isCut=true;
-				
-			}
-			else if(which==4){
-				renameFile(file);
-			}
-			else if(which==5){
-				displayFileInfo(file);
-			}
-		}
+		return false;
+	}
+	@Override
+	public boolean onPrepareOptionsMenu(Menu menu)
+	{
+		return super.onPrepareOptionsMenu(menu);
+	}
+	
+	//新建文件夹
+	public void Mynew()
+	{
+		final LayoutInflater factory = LayoutInflater.from(ContentActivity.this);
+		final View dialogview = factory.inflate(R.layout.dialog, null);
+		//设置TextView
+		((TextView) dialogview.findViewById(R.id.TextView_PROM)).setText("请输入新建文件夹的名称！");
+		//设置EditText
+		((EditText) dialogview.findViewById(R.id.EditText_PROM)).setText("文件夹名称...");
 		
-	}
-	//创建新目录
-	private void creatFile(){
-		final DialogLayout layout = new DialogLayout(this);
-		layout.getTextView().setText("请输入目录名：");
-		this.customDialog("新建目录", layout, 
-				new DialogInterface.OnClickListener() {
-					
-					@Override
-					public void onClick(DialogInterface dialog, int arg1) {
-						// TODO 自动生成的方法存根
-						String newFileName= layout.getEditText().getText().toString();
-						String pathString = currentDirectory.getAbsolutePath();
-						if(!pathString.equals("/")){
-							pathString+="/";
-						}
-						pathString+=newFileName;
-						final File file = new File(pathString);
-						if(file.exists()){
-							showMessageDialog("新建目录", "目录已存在");
-						}
-						else{
-							boolean creat= file.mkdirs();
-							if(creat){
-								showMessageDialog("新建目录", "创建目录成功！");
-								openTheFile(currentDirectory);
-							}
-							else{
-								showMessageDialog("新建目录", "创建目录"+newFileName+"失败！");
-							}
-						}
-						
-					}
-				}, new DialogInterface.OnClickListener() {
-					
-					@Override
+		Builder builder = new Builder(ContentActivity.this);
+		builder.setTitle("新建文件夹");
+		builder.setView(dialogview);
+		builder.setPositiveButton(android.R.string.ok,
+				new AlertDialog.OnClickListener() {
 					public void onClick(DialogInterface dialog, int which) {
-						// TODO 自动生成的方法存根
-						dialog.cancel();
+						String value = ((EditText) dialogview.findViewById(R.id.EditText_PROM)).getText().toString();
+						if ( newFolder(value) )
+						{
+							Builder builder = new Builder(ContentActivity.this);
+							builder.setTitle("提示");
+							builder.setMessage("新建文件夹成功");
+							builder.setPositiveButton(android.R.string.ok,
+									new AlertDialog.OnClickListener() {
+										public void onClick(DialogInterface dialog, int which) {
+											//点击确定按钮之后,继续执行网页中的操作
+											dialog.cancel();
+										}
+									});
+							builder.setCancelable(false);
+							builder.create();
+							builder.show();
+						}
+						else
+						{
+							Builder builder = new Builder(ContentActivity.this);
+							builder.setTitle("提示");
+							builder.setMessage("新建文件夹失败");
+							builder.setPositiveButton(android.R.string.ok,
+									new AlertDialog.OnClickListener() {
+										public void onClick(DialogInterface dialog, int which) {
+											//点击确定按钮之后,继续执行网页中的操作
+											dialog.cancel();
+										}
+									});
+							builder.setCancelable(false);
+							builder.create();
+							builder.show();	
+						}
 					}
-				}, new DialogInterface.OnCancelListener() {
-					
-					@Override
-					public void onCancel(DialogInterface dialog) {
-						// TODO 自动生成的方法存根
+				});
+		builder.setNegativeButton(android.R.string.cancel,
+				new DialogInterface.OnClickListener() {
+					public void onClick(DialogInterface dialog, int which) {
 						dialog.cancel();
 					}
 				});
+		builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
+					public void onCancel(DialogInterface dialog) {
+						dialog.cancel();
+					}
+				});
+		builder.show();
 	}
-	//删除当前目录
-	public void deleteCatalog(){
-		final File nowDirectory = new File(this.currentDirectory.getAbsolutePath());
-		
-		if(nowDirectory.getName().equals("/")){
-			showMessageDialog("删除目录", "根目录,无法删除");
-		}
-		else{
-			final File parentFile = nowDirectory.getParentFile();
-			this.confirmDialog("删除目录", "确定要删除当前目录吗？",
-					new DialogInterface.OnClickListener() {
-						
-						@Override
-						public void onClick(DialogInterface dialog, int which) {
-							// TODO 自动生成的方法存根
-							try{
-								deleteAll(nowDirectory);
-								showMessageDialog("删除目录", "删除目录成功!");
-								currentDirectory= parentFile;
-								openTheFile(currentDirectory);
-							}
-							catch(IOException e){
-								e.printStackTrace();
-								showMessageDialog("删除目录", "删除失败！");
-							}
-						}
-					}, new DialogInterface.OnClickListener() {
-						
-						@Override
-						public void onClick(DialogInterface dialog, int which) {
-							// TODO 自动生成的方法存根
-							dialog.cancel();
-						}
-					});
-			
-		}
- 	}
-	//粘贴文件
-	public void pastFile() {
-		if (tmpFile == null) {
-			this.showMessageDialog("提示", "没有要粘贴的文件");
-		} else {
-			String nowDirectory = currentDirectory.getAbsolutePath();
-			if (!nowDirectory.equals("/")) {
-				nowDirectory += "/";
-			}
-			final File targetFile = new File(nowDirectory + tmpFile.getName());
-			if (!isCut) {
-				if (targetFile.exists()) {
-					this.confirmDialog("复制", "存在相同名称文件，是否覆盖？",
-							new DialogInterface.OnClickListener() {
-
-								@Override
-								public void onClick(DialogInterface dialog,
-										int which) {
-									// TODO 自动生成的方法存根
-									copyFile(tmpFile, targetFile);
-									showMessageDialog("复制", "复制文件成功！");
-									openTheFile(currentDirectory);
-								}
-							}, new DialogInterface.OnClickListener() {
-
-								@Override
-								public void onClick(DialogInterface dialog,
-										int which) {
-									// TODO 自动生成的方法存根
-									dialog.cancel();
-								}
-							});
-				} else {
-					copyFile(tmpFile, targetFile);
-					showMessageDialog("复制", "复制文件成功！");
-					openTheFile(currentDirectory);
+	//新建文件夹
+	public boolean newFolder(String file)
+	{
+		File dirFile = new File(this.currentDirectory.getAbsolutePath()+"/"+file);
+		try
+		{
+			if (!(dirFile.exists()) && !(dirFile.isDirectory()))
+			{
+				boolean creadok = dirFile.mkdirs();
+				if (creadok)
+				{
+					this.browseTo(this.currentDirectory);
+					return true;
 				}
-
-			} else {
-				if (targetFile.exists()) {
-					this.confirmDialog("剪切", "存在相同名称文件，是否覆盖？",
-							new DialogInterface.OnClickListener() {
-
-								@Override
-								public void onClick(DialogInterface dialog,
-										int which) {
-									// TODO 自动生成的方法存根
-									moveFile(tmpFile, targetFile);
-									showMessageDialog("剪切", "剪切文件成功！");
-									openTheFile(currentDirectory);
-									tmpFile = null;
-
-								}
-							}, new DialogInterface.OnClickListener() {
-
-								@Override
-								public void onClick(DialogInterface dialog,
-										int which) {
-									// TODO 自动生成的方法存根
-									dialog.cancel();
-								}
-							});
-				} else {
-					moveFile(tmpFile, targetFile);
-					showMessageDialog("剪切", "剪切文件成功！");
-					openTheFile(currentDirectory);
-					tmpFile = null;
-
+				else
+				{
+					return false;
 				}
 			}
 		}
-	}
-	//菜单选择处理
-	public boolean onOptionsItemSelected(MenuItem menuItem){
-		super.onOptionsItemSelected(menuItem);
-		switch (menuItem.getItemId()) {
-		case menu_new:
-			creatFile();
-			break;
-		case menu_del:
-			deleteCatalog();
-			break;
-		case menu_paste:
-			pastFile();
-			break;
-		case menu_root:
-			this.creatRootFile();
-			break;
-		case menu_uplevel:
-			upLevel();
-			break;
-		default:
-			break;
+		catch (Exception e)
+		{
+			e.printStackTrace();
+			System.out.println(e);
+			return false;
 		}
 		return true;
 	}
+	
+	public void MyDelete()
+	{
+		//取得当前目录
+		File tmp=new File(this.currentDirectory.getAbsolutePath());
+		//跳到上一级目录
+		this.upOneLevel();
+		//删除取得的目录
+		if ( deleteFolder(tmp) )
+		{
+			Builder builder = new Builder(ContentActivity.this);
+			builder.setTitle("提示");
+			builder.setMessage("删除成功");
+			builder.setPositiveButton(android.R.string.ok,
+					new AlertDialog.OnClickListener() {
+						public void onClick(DialogInterface dialog, int which) {
+							dialog.cancel();	
+						}
+					});
+			builder.setCancelable(false);
+			builder.create();
+			builder.show();
+		}
+		else 
+		{
+			Builder builder = new Builder(ContentActivity.this);
+			builder.setTitle("提示");
+			builder.setMessage("删除失败");
+			builder.setPositiveButton(android.R.string.ok,
+					new AlertDialog.OnClickListener() {
+						public void onClick(DialogInterface dialog, int which) {
+							dialog.cancel();
+						}
+					});
+			builder.setCancelable(false);
+			builder.create();
+			builder.show();
+		}
+		this.browseTo(this.currentDirectory);	
+	}
+	
+    //删除文件夹
+	public boolean deleteFolder(File folder)
+	{
+		boolean result = false;
+		try
+		{
+			String childs[] = folder.list();
+			if (childs == null || childs.length <= 0)
+			{
+				if (folder.delete())
+				{
+					result = true;
+				}
+			}
+			else
+			{
+				for (int i = 0; i < childs.length; i++)
+				{
+					String childName = childs[i];
+					String childPath = folder.getPath() + File.separator + childName;
+					File filePath = new File(childPath);
+					if (filePath.exists() && filePath.isFile())
+					{
+						if (filePath.delete())
+						{
+							result = true;
+						}
+						else
+						{
+							result = false;
+							break;
+						}
+					}
+					else if (filePath.exists() && filePath.isDirectory())
+					{
+						if (deleteFolder(filePath))
+						{
+							result = true;
+						}
+						else
+						{
+							result = false;
+							break;
+						}
+					}
+				}
+				folder.delete();
+			}
+		}
+		catch (Exception e)
+		{
+			e.printStackTrace();
+			result = false;
+		}
+		return result;
+	}
+	
+	//粘贴操作
+	public void MyPaste()
+	{
+		if ( myTmpFile == null )
+		{
+			Builder builder = new Builder(ContentActivity.this);
+			builder.setTitle("提示");
+			builder.setMessage("没有复制或剪切操作");
+			builder.setPositiveButton(android.R.string.ok,
+					new AlertDialog.OnClickListener() {
+						public void onClick(DialogInterface dialog, int which) {
+							dialog.cancel();	
+						}
+					});
+			builder.setCancelable(false);
+			builder.create();
+			builder.show();
+		}
+		else
+		{
+			if ( myTmpOpt == 0 )//复制操作
+			{
+				if(new File(GetCurDirectory()+"/"+myTmpFile.getName()).exists())
+				{
+					Builder builder = new Builder(ContentActivity.this);
+					builder.setTitle("粘贴提示");
+					builder.setMessage("该目录有相同的文件，是否需要覆盖？");
+					builder.setPositiveButton(android.R.string.ok,
+							new AlertDialog.OnClickListener() {
+								public void onClick(DialogInterface dialog, int which) {
+									copyFile(myTmpFile,new File(GetCurDirectory()+"/"+myTmpFile.getName()));
+									browseTo(new File(GetCurDirectory()));
+								}
+							});
+					builder.setNegativeButton(android.R.string.cancel,
+							new DialogInterface.OnClickListener() {
+								public void onClick(DialogInterface dialog, int which) {
+									dialog.cancel();
+								}
+							});
+					builder.setCancelable(false);
+					builder.create();
+					builder.show();
+				}	
+				else
+				{
+					copyFile(myTmpFile,new File(GetCurDirectory()+"/"+myTmpFile.getName()));
+					browseTo(new File(GetCurDirectory()));
+				}
+			}
+			else if(myTmpOpt == 1)//粘贴操作
+			{
+				if(new File(GetCurDirectory()+"/"+myTmpFile.getName()).exists())
+				{
+					Builder builder = new Builder(ContentActivity.this);
+					builder.setTitle("粘贴提示");
+					builder.setMessage("该目录有相同的文件，是否需要覆盖？");
+					builder.setPositiveButton(android.R.string.ok,
+							new AlertDialog.OnClickListener() {
+								public void onClick(DialogInterface dialog, int which) {
+									moveFile(myTmpFile.getAbsolutePath(),GetCurDirectory()+"/"+myTmpFile.getName());
+									browseTo(new File(GetCurDirectory()));
+								}
+							});
+					builder.setNegativeButton(android.R.string.cancel,
+							new DialogInterface.OnClickListener() {
+								public void onClick(DialogInterface dialog, int which) {
+									dialog.cancel();
+								}
+							});
+					builder.setCancelable(false);
+					builder.create();
+					builder.show();
+				}	
+				else
+				{
+					moveFile(myTmpFile.getAbsolutePath(),GetCurDirectory()+"/"+myTmpFile.getName());
+					browseTo(new File(GetCurDirectory()));	
+				}
+			}
+		}
+	}
+	
+	public void moveFile(String source, String destination)
+	{
+		new File(source).renameTo(new File(destination));   
+	}
+	//复制文件
+	public void copyFile(File src, File target)
+	{
+		InputStream in = null;
+		OutputStream out = null;
+
+		BufferedInputStream bin = null;
+		BufferedOutputStream bout = null;
+		try
+		{
+			in = new FileInputStream(src);
+			out = new FileOutputStream(target);
+			bin = new BufferedInputStream(in);
+			bout = new BufferedOutputStream(out);
+
+			byte[] b = new byte[8192];
+			int len = bin.read(b);
+			while (len != -1)
+			{
+				bout.write(b, 0, len);
+				len = bin.read(b);
+			}
+
+		}
+		catch (FileNotFoundException e)
+		{
+			e.printStackTrace();
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+		finally
+		{
+			try
+			{
+				if (bin != null)
+				{
+					bin.close();
+				}
+				if (bout != null)
+				{
+					bout.close();
+				}
+			}
+			catch (IOException e)
+			{
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	public String GetCurDirectory()
+	{
+		return this.currentDirectory.getAbsolutePath();
+	}
+	/*
+	public boolean deleteFile(File file)
+	{
+		boolean result = false;
+		if (file != null)
+		{
+			try
+			{
+				//File file2 = file;
+				//file2.delete();
+				
+				file.delete();
+				result = true;
+			}
+			catch (Exception e)
+			{
+				e.printStackTrace();
+				result = false;
+			}
+		}
+		return result;
+	} 
+	*/
 }
