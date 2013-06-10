@@ -9,6 +9,7 @@
     <string name="vedio">影片</string>
     <string name="songs">音乐</string>
     <string name="images">图片</string>
+    <string name="files">文档</string>
 	<string name="no_songs">SD卡上无歌曲</string>
     <string name="option_exit">退出</string>
     <string name="option_scan">扫描</string>
@@ -22,4 +23,5 @@
     <string name="file_deleted">歌曲已经从SD卡上删除</string>
     <string name="up_one_level">..返回上一级目录</string>
     <string name="current_dir">.刷新</string>
+    <string name="filestr">目录浏览</string>
 </resources>

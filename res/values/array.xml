@@ -19,6 +19,7 @@
         <item>.zip</item>
         <item>.rar</item>
         <item>.gz</item>
+        <item>.apk</item>
     </array>
 <array name="fileEndingWebText">
         <item>.htm</item>
