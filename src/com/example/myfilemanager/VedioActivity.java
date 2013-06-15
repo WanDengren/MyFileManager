@@ -193,6 +193,10 @@ public class VedioActivity extends ListActivity implements
 		String title = cursor.getString(cursor
 				.getColumnIndex(MediaStore.Video.Media.TITLE));
 		Toast.makeText(this, title, Toast.LENGTH_SHORT).show();
+		String path = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA));
+		File afile = new File(path);
+		openFile(afile);
+		
 	}
 	
 	protected void openFile(File aFile)

@@ -29,14 +29,14 @@ public class MainActivity extends TabActivity implements
 		TabHost.TabSpec sort = tabHost.newTabSpec(SORT);
 		sort.setIndicator(SORT, null);
 		// content设置为intent,则会启动一个Activity作为内容
-		Intent s_intent = new Intent(this, SortActivity.class);
+		Intent s_intent = new Intent(this, SortActivity.class);//KANGKANG
 		sort.setContent(s_intent);
 		// 将sort加入到TabHost对象中
 		tabHost.addTab(sort);
 
 		TabHost.TabSpec list = tabHost.newTabSpec(LIST);
 		list.setIndicator(LIST, null);
-		Intent l_intent = new Intent(this, ContentActivity.class);
+		Intent l_intent = new Intent(this, ContentActivity.class);//WANDENGREN
 		list.setContent(l_intent);
 		tabHost.addTab(list);
 

@@ -9,6 +9,7 @@ import android.view.View.OnCreateContextMenuListener;
 import android.database.Cursor;
 import android.os.Bundle;
 import android.content.ContentResolver;
+import android.content.Intent;
 import android.provider.MediaStore;
 import android.widget.SimpleCursorAdapter;
 import android.widget.ListView;
@@ -190,5 +191,22 @@ public class ImageActivity extends ListActivity implements
 		String title = cursor.getString(cursor
 				.getColumnIndex(MediaStore.Images.Media.TITLE));
 		Toast.makeText(this, title, Toast.LENGTH_SHORT).show();
+		String path = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA));
+		File afile = new File(path);
+		openFile(afile);
+	}
+	
+	protected void openFile(File aFile)
+	{
+		Intent intent = new Intent();
+		intent.setAction(android.content.Intent.ACTION_VIEW);
+		File file = new File(aFile.getAbsolutePath());
+		// 取得文件名
+		String fileName = file.getName();
+		// 根据不同的文件类型来打开文件
+
+			intent.setDataAndType(Uri.fromFile(file), "application/*");
+			
+		startActivity(intent);
 	}
 }
